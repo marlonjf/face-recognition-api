@@ -1,6 +1,19 @@
 const express = require('express');
 const bcrypt = require('bcrypt-nodejs');
 const cors = require('cors');
+const knex = require('knex')
+
+
+const db = knex({
+  client: 'pg',
+  connection: {
+    host: '127.0.0.1',
+    user: 'user',
+    password: '',
+    database: 'face-recognition'
+  }
+});
+
 
 const app = express ();
 app.use(express.urlencoded({ extended: false }));
@@ -42,16 +55,20 @@ app.get('/', (req, res)=>{
 
 app.get('/profile/:id', (req, res) => {
   const { id } = req.params;
-  let found = false;
-  database.users.forEach(user => {
-    if (user.id === id) {
-      found = true
-      return res.json(user);
-    }
+  db.select('*').from('users').where({
+    id: id
   })
-  if (!found) {
-    res.status(400).json('not found');
-  }
+    .then(user => {
+      if (user.length){
+        res.json(user[0])
+      } else {
+        res.status(400).json('Not Found')
+      }
+  })
+  .catch(err => res.status(400).json('error getting user'))
+  // if (!found) {
+  //   res.status(400).json('not found');
+  // }
 })
 
 app.put('/image', (req, res) => {
@@ -82,14 +99,17 @@ app.post('/register', (req, res) => {
   bcrypt.hash(password, null, null, function(err, hash) {
     console.log(hash)
   });
-  database.users.push({
-    id: '125',
-    name: name,
+  db('users')
+  .returning('*')
+  .insert({
     email: email,
-    entries: 0,
+    name: name,
     joined: new Date()
   })
- res.json(database.users[database.users.length-1])
+    .then(user => {
+      res.json(user[0])
+    })
+    .catch(err => res.status(400).json('unable to register'))
 })
 
 app.listen(3000, () => {
