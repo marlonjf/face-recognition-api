@@ -1,8 +1,12 @@
 const express = require('express');
 const bcrypt = require('bcrypt-nodejs');
 const cors = require('cors');
-const knex = require('knex')
+const knex = require('knex');
+const Clarifai = require('clarifai');
 
+const clarifai = new Clarifai.App({
+  apiKey: '90945e092129421ba4a256a756a7781c'
+});
 
 const db = knex({
   client: 'pg',
@@ -73,45 +77,77 @@ app.get('/profile/:id', (req, res) => {
 
 app.put('/image', (req, res) => {
   const { id } = req.body;
-  let found = false;
-  database.users.forEach(user => {
-    if (user.id === id) {
-      found = true;
-      user.entries++;
-      return res.json(user.entries);
-    }
-  })
-  if (!found) {
-    res.status(400).json('not found');
-  }
+  db('users').where('id', '=', id)
+    .increment('entries', 1)
+    .returning('entries')
+    .then(entries => {
+      res.json(entries[0]);
+    })
+    .catch(err => res.status(400).json('unable to get entries'))
 })
 
 app.post('/signin', (req, res)=>{
-  if (req.body.email === database.users[0].email && req.body.password === database.users[0].password) {
-    res.json(database.users[0]);
-  } else {
-    res.status(400).json('error logging in');
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json('invalid data');
   }
+  db.select('email', 'hash').from('login')
+    .where('email', '=', email)
+    .then(data=> {
+      const isValid = bcrypt.compareSync(password, data[0].hash);
+      if (isValid){
+        return db.select('*').from('users')
+        .where('email', '=', email)
+        .then(user => {
+          res.json(user[0])
+        })
+        .catch(err => res.status(400).json('unable to get user'))
+      } else {
+        res.status(400).json('wrong credentials')
+      }
+  })
+    .catch(err => res.status(400).json('wrong credentials'))
 })
 
 app.post('/register', (req, res) => {
   const {email, name, password } = req.body;
-  bcrypt.hash(password, null, null, function(err, hash) {
-    console.log(hash)
-  });
-  db('users')
-  .returning('*')
-  .insert({
-    email: email,
-    name: name,
-    joined: new Date()
-  })
-    .then(user => {
-      res.json(user[0])
+  if (!email || !name || !password) {
+    return res.status(400).json('invalid data');
+  }
+  const hash = bcrypt.hashSync(password);
+  db.transaction(trx => {
+    trx.insert({
+      hash: hash,
+      email: email
     })
-    .catch(err => res.status(400).json('unable to register'))
+    .into('login')
+    .returning('email')
+    .then(loginEmail =>{
+      return trx('users')
+        .returning('*')
+        .insert({
+          email: loginEmail[0],
+          name: name,
+          joined: new Date()
+        })
+        .then(user => {
+          res.json(user[0])
+        })
+    })
+    .then(trx.commit)
+    .catch(trx.rollback)
+  })
+  .catch(err => res.status(400).json('unable to register'))
 })
 
 app.listen(3000, () => {
   console.log('test');
+})
+
+app.post('/imageurl', (req, res) => {
+  clarifai.models.predict(Clarifai.FACE_DETECT_MODEL, req.body.input)
+    .then(data => {
+      res.json(data);
+    })
+    .catch(err => res.status(400).json('unable api'))
 })
