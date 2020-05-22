@@ -140,8 +140,8 @@ app.post('/register', (req, res) => {
   .catch(err => res.status(400).json('unable to register'))
 })
 
-app.listen(3000, () => {
-  console.log('test');
+app.listen(process.env.PORT || 3000, () => {
+  console.log(`app running on port ${process.env.PORT}`);
 })
 
 app.post('/imageurl', (req, res) => {
