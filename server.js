@@ -8,6 +8,8 @@ const clarifai = new Clarifai.App({
   apiKey: '90945e092129421ba4a256a756a7781c'
 });
 
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
+
 const db = knex({
   client: 'pg',
   connection: {
